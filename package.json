@@ -1,0 +1,12 @@
+{
+  "name": "kindergarten-debt-manager",
+  "version": "1.0.0",
+  "description": "מערכת לניהול חובות משפחות בגן ילדים - Kindergarten Family Debt Management System",
+  "private": true,
+  "scripts": {
+    "dev": "npx -y serve@latest . -l 3000",
+    "start": "npx -y serve@latest . -l 3000"
+  },
+  "keywords": ["kindergarten", "debt", "management", "hebrew", "rtl"],
+  "license": "MIT"
+}
