@@ -566,59 +566,134 @@ body {
 
 /* Compact View Grid */
 .families-grid.compact-view {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
 }
 
 /* Compact Card */
 .family-card.compact {
-    padding: 14px 16px;
-    cursor: pointer;
+    padding: 0;
+    cursor: default;
+    overflow: visible;
 }
 
 .family-card.compact::before {
     height: 2px;
 }
 
-.family-card.compact .card-header {
-    margin-bottom: 0;
-    flex-direction: column;
-    gap: 8px;
-    align-items: stretch;
-}
-
-.family-card.compact .card-title-section {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-}
-
-.family-card.compact .card-family-name {
-    font-size: 15px;
-}
-
-.family-card.compact .card-family-code {
-    font-size: 11px;
-}
-
-.family-card.compact .card-debt {
-    font-size: 14px;
-    padding: 4px 10px;
-    text-align: center;
-}
-
+.family-card.compact .card-header,
 .family-card.compact .card-details,
 .family-card.compact .card-actions {
     display: none;
 }
 
-.family-card.compact .compact-actions {
+.compact-row {
     display: flex;
-    gap: 4px;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-glass);
-    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+}
+
+.compact-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+.compact-code {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-glass);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.compact-debt {
+    margin-right: auto;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--accent-danger);
+    background: rgba(239, 68, 68, 0.1);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.compact-menu-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+    line-height: 1;
+}
+
+.compact-menu-btn:hover {
+    background: var(--bg-glass);
+    color: var(--text-primary);
+}
+
+.compact-context-menu {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    margin: 0 8px 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.compact-context-menu button {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    padding: 10px 16px;
+    font-family: var(--font-family);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: right;
+    transition: var(--transition);
+}
+
+.compact-context-menu button:hover {
+    background: var(--bg-glass);
+}
+
+.compact-context-menu button.danger {
+    color: var(--accent-danger);
+}
+
+.compact-context-menu button.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Toast WhatsApp Button */
+.toast-wa-btn {
+    background: var(--accent-whatsapp);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: var(--font-family);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 8px;
+    white-space: nowrap;
+    transition: var(--transition);
+}
+
+.toast-wa-btn:hover {
+    filter: brightness(1.15);
 }
 
 .compact-actions {
@@ -1264,6 +1339,85 @@ body {
     width: 100% !important;
     min-width: unset !important;
     padding-left: 36px;
+}
+
+/* Reminder Row */
+.reminder-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.reminder-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.reminder-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+}
+
+.reminder-fields {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.reminder-fields input[type="date"],
+.reminder-fields input[type="time"] {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: 13px;
+    outline: none;
+    transition: var(--transition);
+}
+
+.reminder-fields input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.reminder-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--accent-warning);
+    background: rgba(245, 158, 11, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+/* WhatsApp Recipient Picker */
+.wa-picker-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.wa-pick-btn {
+    padding: 14px 20px !important;
+    font-size: 14px !important;
+    justify-content: center;
+    text-align: center;
 }
 
 /* ========================================

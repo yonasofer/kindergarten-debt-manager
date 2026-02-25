@@ -162,9 +162,15 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="phone">מספר טלפון</label>
-                        <input type="tel" id="phone" required placeholder="050-0000000" />
+                        <label for="fatherPhone">טלפון האב</label>
+                        <input type="tel" id="fatherPhone" placeholder="050-0000000" />
                     </div>
+                    <div class="form-group">
+                        <label for="motherPhone">טלפון האם</label>
+                        <input type="tel" id="motherPhone" placeholder="050-0000000" />
+                    </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label for="location">מיקום הגן</label>
                         <select id="location" required class="filter-select form-select-field">
@@ -197,6 +203,16 @@
             <div class="panel-body">
                 <div class="add-comment-section">
                     <textarea id="commentInput" placeholder="כתוב הערה חדשה..." rows="3"></textarea>
+                    <div class="reminder-row">
+                        <label class="reminder-label">
+                            <input type="checkbox" id="reminderToggle" />
+                            ⏰ תזכורת
+                        </label>
+                        <div class="reminder-fields" id="reminderFields" style="display:none;">
+                            <input type="date" id="reminderDate" />
+                            <input type="time" id="reminderTime" value="09:00" />
+                        </div>
+                    </div>
                     <div class="comment-actions-row">
                         <button class="btn btn-primary btn-sm" id="addCommentBtn">הוסף הערה</button>
                         <button class="btn btn-whatsapp btn-sm" id="sendCommentAsNotification"
@@ -232,6 +248,30 @@
                 <div class="modal-actions">
                     <button class="btn btn-primary" id="saveEditCommentBtn">שמור</button>
                     <button class="btn btn-secondary" id="cancelEditCommentBtn">ביטול</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WhatsApp Recipient Picker Modal -->
+    <div class="modal-overlay" id="whatsappPickerModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>📱 שלח לוואטסאפ</h2>
+                <button class="modal-close" id="closeWhatsappPicker">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="section-desc">בחר למי לשלוח את ההודעה:</p>
+                <div class="wa-picker-options" id="waPickerOptions">
+                    <button class="btn btn-secondary wa-pick-btn" data-target="father" id="waPickFather">
+                        👨 לאב (<span id="waPickFatherPhone"></span>)
+                    </button>
+                    <button class="btn btn-secondary wa-pick-btn" data-target="mother" id="waPickMother">
+                        👩 לאם (<span id="waPickMotherPhone"></span>)
+                    </button>
+                    <button class="btn btn-whatsapp wa-pick-btn" data-target="both" id="waPickBoth">
+                        👨‍👩‍👧 לשניהם
+                    </button>
                 </div>
             </div>
         </div>
@@ -336,6 +376,20 @@
                             <input type="text" id="whatsappSignature" placeholder="בברכה, הנהלת הגן" />
                         </div>
                         <button class="btn btn-primary" id="saveWhatsappTemplate">שמור תבנית</button>
+                        <hr class="divider" />
+                        <h3>📲 הגדרות מנהל (לקבלת תזכורות)</h3>
+                        <p class="section-desc">הזן טלפון וואטסאפ ו/או מייל לקבלת תזכורות אוטומטיות</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="managerPhone">טלפון המנהל</label>
+                                <input type="tel" id="managerPhone" placeholder="050-0000000" />
+                            </div>
+                            <div class="form-group">
+                                <label for="managerEmail">מייל המנהל</label>
+                                <input type="email" id="managerEmail" placeholder="manager@example.com" />
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="saveManagerSettings">שמור הגדרות מנהל</button>
                     </div>
                 </div>
             </div>

@@ -8,7 +8,8 @@ const STORAGE_KEYS = {
     comments: 'kdm_comments',
     notifications: 'kdm_notifications',
     locations: 'kdm_locations',
-    settings: 'kdm_settings'
+    settings: 'kdm_settings',
+    reminders: 'kdm_reminders'
 };
 
 function generateId() {
@@ -32,6 +33,7 @@ let families = loadData(STORAGE_KEYS.families);
 let comments = loadData(STORAGE_KEYS.comments);
 let notifications = loadData(STORAGE_KEYS.notifications);
 let locations = loadData(STORAGE_KEYS.locations);
+let reminders = loadData(STORAGE_KEYS.reminders);
 let settings = (() => {
     try {
         return JSON.parse(localStorage.getItem(STORAGE_KEYS.settings)) || {};
@@ -40,6 +42,7 @@ let settings = (() => {
 let currentFamilyId = null;
 let deleteCallback = null;
 let currentView = 'full';
+let pendingWaSend = null; // stores { message, familyName, fatherPhone, motherPhone } for picker
 
 // ============ FORMATTERS ============
 function formatDate(timestamp) {
@@ -62,7 +65,7 @@ function formatPhone(phone) {
 }
 
 // ============ TOAST NOTIFICATIONS ============
-function showToast(message, type = 'success') {
+function showToast(message, type = 'success', actionHtml = '') {
     const container = document.getElementById('toastContainer');
     const icons = { success: '✅', error: '❌', info: 'ℹ️' };
     const toast = document.createElement('div');
@@ -70,12 +73,13 @@ function showToast(message, type = 'success') {
     toast.innerHTML = `
         <span class="toast-icon">${icons[type]}</span>
         <span class="toast-message">${message}</span>
+        ${actionHtml}
     `;
     container.appendChild(toast);
     setTimeout(() => {
         toast.classList.add('removing');
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, actionHtml ? 10000 : 3000);
 }
 
 // ============ VIEW TOGGLE ============
@@ -206,23 +210,16 @@ function renderFamilies() {
 
         if (currentView === 'compact') {
             card.innerHTML = `
-                <div class="card-header">
-                    <div class="card-title-section">
-                        <span class="card-family-name">${escapeHtml(f.familyName)}</span>
-                        <span class="card-family-code">${escapeHtml(f.familyCode)}</span>
-                    </div>
-                    <div class="card-debt">${formatCurrency(f.debtAmount)}</div>
+                <div class="compact-row">
+                    <span class="compact-name">${escapeHtml(f.familyName)}</span>
+                    <span class="compact-code">${escapeHtml(f.familyCode)}</span>
+                    <span class="compact-debt">${formatCurrency(f.debtAmount)}</span>
+                    <button class="compact-menu-btn" data-id="${f.id}" onclick="toggleCompactMenu(event, '${f.id}')">⋮</button>
                 </div>
-                <div class="compact-actions">
-                    <button class="btn-icon" onclick="openComments('${f.id}')" title="הערות">
-                        💬
-                    </button>
-                    <button class="btn-icon" onclick="editFamily('${f.id}')" title="עריכה">
-                        ✏️
-                    </button>
-                    <button class="btn-icon danger" onclick="confirmDeleteFamily('${f.id}')" title="מחיקה">
-                        🗑️
-                    </button>
+                <div class="compact-context-menu" id="compactMenu-${f.id}" style="display:none">
+                    <button onclick="openComments('${f.id}'); closeAllCompactMenus()">💬 הערות (${commentsCount})</button>
+                    <button onclick="editFamily('${f.id}'); closeAllCompactMenus()">✏️ עריכה</button>
+                    <button class="danger" onclick="confirmDeleteFamily('${f.id}'); closeAllCompactMenus()">🗑️ מחיקה</button>
                 </div>
             `;
         } else {
@@ -247,8 +244,10 @@ function renderFamilies() {
                 </div>
                 <div class="card-detail">
                     <span class="card-detail-icon">📞</span>
-                    <span class="card-detail-label">טלפון:</span>
-                    <span class="card-detail-value" dir="ltr">${escapeHtml(f.phone)}</span>
+                    <span class="card-detail-label">אב:</span>
+                    <span class="card-detail-value" dir="ltr">${f.fatherPhone ? escapeHtml(f.fatherPhone) : '-'}</span>
+                    <span class="card-detail-label" style="margin-right:8px;">אם:</span>
+                    <span class="card-detail-value" dir="ltr">${f.motherPhone ? escapeHtml(f.motherPhone) : '-'}</span>
                 </div>
                 <div class="card-detail">
                     <span class="card-detail-icon">📍</span>
@@ -280,6 +279,28 @@ function renderFamilies() {
     }
 }
 
+// ============ COMPACT CONTEXT MENU ============
+function toggleCompactMenu(event, familyId) {
+    event.stopPropagation();
+    const menu = document.getElementById(`compactMenu-${familyId}`);
+    const wasOpen = menu.style.display !== 'none';
+    closeAllCompactMenus();
+    if (!wasOpen) {
+        menu.style.display = 'flex';
+    }
+}
+
+function closeAllCompactMenus() {
+    document.querySelectorAll('.compact-context-menu').forEach(m => m.style.display = 'none');
+}
+
+// Close menus on outside click
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.compact-menu-btn') && !e.target.closest('.compact-context-menu')) {
+        closeAllCompactMenus();
+    }
+});
+
 // ============ FAMILY CRUD ============
 document.getElementById('addFamilyBtn').addEventListener('click', () => {
     document.getElementById('familyModalTitle').textContent = 'הוסף משפחה חדשה';
@@ -300,10 +321,16 @@ document.getElementById('familyForm').addEventListener('submit', (e) => {
         familyName: document.getElementById('familyName').value.trim(),
         fatherName: document.getElementById('fatherName').value.trim(),
         motherName: document.getElementById('motherName').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
+        fatherPhone: document.getElementById('fatherPhone').value.trim(),
+        motherPhone: document.getElementById('motherPhone').value.trim(),
         location: document.getElementById('location').value.trim(),
         debtAmount: parseFloat(document.getElementById('debtAmount').value) || 0,
     };
+
+    if (!familyData.fatherPhone && !familyData.motherPhone) {
+        showToast('נא להזין לפחות מספר טלפון אחד', 'error');
+        return;
+    }
 
     if (id) {
         // Edit
@@ -339,7 +366,8 @@ function editFamily(id) {
     document.getElementById('familyName').value = f.familyName;
     document.getElementById('fatherName').value = f.fatherName;
     document.getElementById('motherName').value = f.motherName;
-    document.getElementById('phone').value = f.phone;
+    document.getElementById('fatherPhone').value = f.fatherPhone || f.phone || '';
+    document.getElementById('motherPhone').value = f.motherPhone || '';
     document.getElementById('location').value = f.location;
     document.getElementById('debtAmount').value = f.debtAmount;
     openModal('familyModal');
@@ -400,10 +428,15 @@ function renderComments() {
         return;
     }
 
-    list.innerHTML = familyComments.map(c => `
+    list.innerHTML = familyComments.map(c => {
+        const reminder = reminders.find(r => r.commentId === c.id && !r.fired);
+        const reminderBadge = reminder
+            ? `<span class="reminder-badge">⏰ ${formatDate(reminder.remindAt)}</span>`
+            : '';
+        return `
         <div class="comment-item">
             <div class="comment-header">
-                <span class="comment-timestamp">${formatDate(c.createdAt)}${c.updatedAt ? ' (עודכן)' : ''}</span>
+                <span class="comment-timestamp">${formatDate(c.createdAt)}${c.updatedAt ? ' (עודכן)' : ''} ${reminderBadge}</span>
                 <div class="comment-btn-group">
                     <button class="btn-icon" onclick="openEditComment('${c.id}')" title="ערוך">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -420,7 +453,8 @@ function renderComments() {
             </div>
             <div class="comment-text">${escapeHtml(c.description)}</div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 document.getElementById('addCommentBtn').addEventListener('click', () => {
@@ -431,17 +465,23 @@ document.getElementById('addCommentBtn').addEventListener('click', () => {
         return;
     }
 
-    comments.push({
+    const commentObj = {
         id: generateId(),
         familyId: currentFamilyId,
         description: text,
         createdAt: Date.now(),
         updatedAt: null
-    });
+    };
+    comments.push(commentObj);
     saveData(STORAGE_KEYS.comments, comments);
+
+    // Check for reminder
+    handleReminderForComment(commentObj);
+
     input.value = '';
+    resetReminderFields();
     renderComments();
-    renderFamilies(); // Update comment count on cards
+    renderFamilies();
     showToast('הערה נוספה בהצלחה');
 });
 
@@ -458,14 +498,18 @@ document.getElementById('sendCommentAsNotification').addEventListener('click', (
     if (!family) return;
 
     // Add as comment
-    comments.push({
+    const commentObj = {
         id: generateId(),
         familyId: currentFamilyId,
         description: text,
         createdAt: Date.now(),
         updatedAt: null
-    });
+    };
+    comments.push(commentObj);
     saveData(STORAGE_KEYS.comments, comments);
+
+    // Check for reminder
+    handleReminderForComment(commentObj);
 
     // Add as notification
     const notif = {
@@ -479,14 +523,15 @@ document.getElementById('sendCommentAsNotification').addEventListener('click', (
     notifications.push(notif);
     saveData(STORAGE_KEYS.notifications, notifications);
 
-    // Open WhatsApp
-    sendWhatsApp(family.phone, text, family.familyName);
+    // Open WhatsApp with recipient picker
+    openWhatsAppPicker(family, text);
 
     input.value = '';
+    resetReminderFields();
     renderComments();
     renderFamilies();
     updateDashboard();
-    showToast('הודעה נשלחה לוואטסאפ');
+    showToast('הודעה נשלחת לוואטסאפ');
 });
 
 // Edit comment
@@ -635,9 +680,56 @@ function sendNotifWhatsApp(notifId) {
     renderNotifications();
     updateDashboard();
 
-    sendWhatsApp(family.phone, n.message, family.familyName);
-    showToast('הודעה נשלחה לוואטסאפ');
+    openWhatsAppPicker(family, n.message);
+    showToast('הודעה נשלחת לוואטסאפ');
 }
+
+// ============ WHATSAPP RECIPIENT PICKER ============
+function openWhatsAppPicker(family, message) {
+    const fatherPhone = family.fatherPhone || family.phone || '';
+    const motherPhone = family.motherPhone || '';
+
+    // If only one phone exists, send directly
+    if (fatherPhone && !motherPhone) {
+        sendWhatsApp(fatherPhone, message, family.familyName);
+        return;
+    }
+    if (!fatherPhone && motherPhone) {
+        sendWhatsApp(motherPhone, message, family.familyName);
+        return;
+    }
+
+    // Both phones exist — show picker
+    pendingWaSend = { message, familyName: family.familyName, fatherPhone, motherPhone };
+    document.getElementById('waPickFatherPhone').textContent = fatherPhone;
+    document.getElementById('waPickMotherPhone').textContent = motherPhone;
+    document.getElementById('waPickFather').style.display = '';
+    document.getElementById('waPickMother').style.display = '';
+    openModal('whatsappPickerModal');
+}
+
+document.getElementById('closeWhatsappPicker').addEventListener('click', () => closeModal('whatsappPickerModal'));
+
+document.querySelectorAll('.wa-pick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (!pendingWaSend) return;
+        const target = btn.dataset.target;
+        const { fatherPhone, motherPhone, message, familyName } = pendingWaSend;
+        pendingWaSend = null;
+        closeModal('whatsappPickerModal');
+
+        if (target === 'father') {
+            sendWhatsApp(fatherPhone, message, familyName);
+        } else if (target === 'mother') {
+            sendWhatsApp(motherPhone, message, familyName);
+        } else if (target === 'both') {
+            sendWhatsApp(fatherPhone, message, familyName);
+            setTimeout(() => {
+                sendWhatsApp(motherPhone, message, familyName);
+            }, 500);
+        }
+    });
+});
 
 function sendWhatsApp(phone, message, familyName) {
     const formattedPhone = formatPhone(phone);
@@ -667,7 +759,7 @@ document.getElementById('locationFilter').addEventListener('change', renderFamil
 // ============ KEYBOARD SHORTCUTS ============
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['familyModal', 'editCommentModal', 'deleteModal', 'commentsPanel', 'notificationsPanel', 'managementPanel', 'editLocationModal'].forEach(id => {
+        ['familyModal', 'editCommentModal', 'deleteModal', 'commentsPanel', 'notificationsPanel', 'managementPanel', 'editLocationModal', 'whatsappPickerModal'].forEach(id => {
             if (document.getElementById(id).classList.contains('active')) {
                 closeModal(id);
             }
@@ -833,6 +925,7 @@ document.getElementById('exportDataBtn').addEventListener('click', () => {
         comments,
         notifications,
         locations,
+        reminders,
         settings
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -859,8 +952,9 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
         'קוד משפחה': f.familyCode,
         'שם משפחה': f.familyName,
         'שם האב': f.fatherName,
+        'טלפון האב': f.fatherPhone || f.phone || '',
         'שם האם': f.motherName,
-        'טלפון': f.phone,
+        'טלפון האם': f.motherPhone || '',
         'מיקום': f.location,
         'סכום חוב': f.debtAmount,
         'מספר הערות': comments.filter(c => c.familyId === f.id).length,
@@ -868,8 +962,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
     }));
     const wsFamilies = XLSX.utils.json_to_sheet(familiesData);
     wsFamilies['!cols'] = [
-        { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
-        { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
+        { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 },
+        { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
     ];
     XLSX.utils.book_append_sheet(wb, wsFamilies, 'משפחות');
 
@@ -968,10 +1062,12 @@ document.getElementById('clearAllDataBtn').addEventListener('click', () => {
         notifications = [];
         locations = [];
         settings = {};
+        reminders = [];
         saveData(STORAGE_KEYS.families, families);
         saveData(STORAGE_KEYS.comments, comments);
         saveData(STORAGE_KEYS.notifications, notifications);
         saveData(STORAGE_KEYS.locations, locations);
+        saveData(STORAGE_KEYS.reminders, reminders);
         localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
         updateDashboard();
         renderFamilies();
@@ -986,6 +1082,7 @@ document.getElementById('clearAllDataBtn').addEventListener('click', () => {
 function loadWhatsappTemplate() {
     document.getElementById('whatsappGreeting').value = settings.whatsappGreeting || 'שלום משפחת {שם_משפחה},';
     document.getElementById('whatsappSignature').value = settings.whatsappSignature || 'בברכה,\nהנהלת הגן';
+    loadManagerSettings();
 }
 
 document.getElementById('saveWhatsappTemplate').addEventListener('click', () => {
@@ -995,11 +1092,154 @@ document.getElementById('saveWhatsappTemplate').addEventListener('click', () => 
     showToast('תבנית הודעה נשמרה בהצלחה');
 });
 
+// ============ MANAGER SETTINGS ============
+function loadManagerSettings() {
+    document.getElementById('managerPhone').value = settings.managerPhone || '';
+    document.getElementById('managerEmail').value = settings.managerEmail || '';
+}
+
+document.getElementById('saveManagerSettings').addEventListener('click', () => {
+    settings.managerPhone = document.getElementById('managerPhone').value.trim();
+    settings.managerEmail = document.getElementById('managerEmail').value.trim();
+    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+    showToast('הגדרות מנהל נשמרו בהצלחה');
+});
+
+// ============ REMINDER SYSTEM ============
+document.getElementById('reminderToggle').addEventListener('change', (e) => {
+    const fields = document.getElementById('reminderFields');
+    fields.style.display = e.target.checked ? 'flex' : 'none';
+    if (e.target.checked) {
+        // Default to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('reminderDate').value = tomorrow.toISOString().slice(0, 10);
+    }
+});
+
+function handleReminderForComment(commentObj) {
+    const toggle = document.getElementById('reminderToggle');
+    if (!toggle.checked) return;
+
+    const dateVal = document.getElementById('reminderDate').value;
+    const timeVal = document.getElementById('reminderTime').value;
+    if (!dateVal || !timeVal) {
+        showToast('נא להזין תאריך ושעה לתזכורת', 'error');
+        return;
+    }
+
+    const remindAt = new Date(`${dateVal}T${timeVal}`).getTime();
+    if (remindAt <= Date.now()) {
+        showToast('תאריך התזכורת חייב להיות בעתיד', 'error');
+        return;
+    }
+
+    const family = families.find(f => f.id === commentObj.familyId);
+    reminders.push({
+        id: generateId(),
+        commentId: commentObj.id,
+        familyId: commentObj.familyId,
+        familyName: family ? family.familyName : '',
+        message: commentObj.description,
+        remindAt,
+        fired: false,
+        createdAt: Date.now()
+    });
+    saveData(STORAGE_KEYS.reminders, reminders);
+    showToast(`תזכורת נקבעה ל-${formatDate(remindAt)}`, 'info');
+}
+
+function resetReminderFields() {
+    document.getElementById('reminderToggle').checked = false;
+    document.getElementById('reminderFields').style.display = 'none';
+    document.getElementById('reminderDate').value = '';
+    document.getElementById('reminderTime').value = '09:00';
+}
+
+// Check reminders every 30 seconds
+function checkReminders() {
+    const now = Date.now();
+    let changed = false;
+
+    reminders.forEach(r => {
+        if (!r.fired && r.remindAt <= now) {
+            r.fired = true;
+            changed = true;
+
+            const family = families.find(f => f.id === r.familyId);
+            const familyName = r.familyName || (family ? family.familyName : 'לא ידוע');
+
+            // Show browser notification
+            if (Notification.permission === 'granted') {
+                new Notification(`⏰ תזכורת - משפחת ${familyName}`, {
+                    body: r.message,
+                    icon: '💬',
+                    tag: r.id
+                });
+            }
+
+            // Build WhatsApp button for toast
+            let waActionHtml = '';
+            if (family) {
+                const phone = family.fatherPhone || family.motherPhone || family.phone || '';
+                if (phone) {
+                    waActionHtml = `<button class="toast-wa-btn" onclick="openWhatsAppPicker(families.find(f=>f.id==='${family.id}'), '${escapeHtml(r.message.replace(/'/g, "\\'"))}')">  📱 שלח לוואטסאפ</button>`;
+                }
+            }
+
+            // Show in-app toast with WhatsApp button
+            showToast(`⏰ תזכורת: משפחת ${familyName} - ${r.message.slice(0, 50)}`, 'info', waActionHtml);
+
+            // Auto-send email to manager if configured
+            if (settings.managerEmail) {
+                const emailSubject = `⏰ תזכורת - משפחת ${familyName}`;
+                const emailBody = `תזכורת ממערכת ניהול חובות\n\nמשפחה: ${familyName}\nהערה: ${r.message}\nתאריך תזכורת: ${formatDate(r.remindAt)}`;
+
+                fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: settings.managerEmail,
+                        subject: emailSubject,
+                        body: emailBody
+                    })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast(`✉️ מייל תזכורת נשלח ל-${settings.managerEmail}`);
+                        } else {
+                            showToast(`❌ שליחת מייל נכשלה: ${data.error}`, 'error');
+                        }
+                    })
+                    .catch(err => {
+                        showToast('❌ שליחת מייל נכשלה - בדוק שהשרת פועל', 'error');
+                        console.error('Email send error:', err);
+                    });
+            }
+        }
+    });
+
+    if (changed) {
+        saveData(STORAGE_KEYS.reminders, reminders);
+        if (currentFamilyId) renderComments();
+    }
+}
+
 // ============ INIT ============
 function init() {
+    // Request notification permission for reminders
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
     updateDashboard();
     renderFamilies();
     updateNotifFamilySelect();
+
+    // Start reminder checker
+    checkReminders();
+    setInterval(checkReminders, 30000);
 }
 
 init();
